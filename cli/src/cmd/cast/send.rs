@@ -185,46 +185,46 @@ impl SendTxArgs {
             let chain_id: U256 = chain.into();
             let aws = AwsSigner::new(life, key_id, chain_id.as_u64()).await?;
             let signer = SignerMiddleware::new(provider.clone(), aws);
-            // let from = signer.address();
-            // // prevent misconfigured hwlib from sending a transaction that defies
-            // // user-specified --from
-            // if let Some(specified_from) = eth.wallet.from {
-            //     if specified_from != from {
-            //         eyre::bail!("The specified sender via CLI/env vars does not match the sender configured via the hardware wallet's HD Path. Please use the `--hd-path <PATH>` parameter to specify the BIP32 Path which corresponds to the sender. This will be automatically detected in the future: https://github.com/foundry-rs/foundry/issues/2289")
-            //     }
-            // }
+            let from = signer.address();
+            // prevent misconfigured hwlib from sending a transaction that defies
+            // user-specified --from
+            if let Some(specified_from) = eth.wallet.from {
+                if specified_from != from {
+                    eyre::bail!("The specified sender via CLI/env vars does not match the sender configured via the hardware wallet's HD Path. Please use the `--hd-path <PATH>` parameter to specify the BIP32 Path which corresponds to the sender. This will be automatically detected in the future: https://github.com/foundry-rs/foundry/issues/2289")
+                }
+            }
 
-            // if resend {
-            //     tx.nonce = Some(provider.get_transaction_count(from, None).await?);
-            // }
+            if resend {
+                tx.nonce = Some(provider.get_transaction_count(from, None).await?);
+            }
 
-            // let code = if let Some(SendTxSubcommands::Create {
-            //     code,
-            //     sig: constructor_sig,
-            //     args: constructor_args,
-            // }) = command
-            // {
-            //     sig = constructor_sig.unwrap_or_default();
-            //     args = constructor_args;
-            //     Some(code)
-            // } else {
-            //     None
-            // };
+            let code = if let Some(SendTxSubcommands::Create {
+                code,
+                sig: constructor_sig,
+                args: constructor_args,
+            }) = command
+            {
+                sig = constructor_sig.unwrap_or_default();
+                args = constructor_args;
+                Some(code)
+            } else {
+                None
+            };
 
-            // cast_send(
-            //     signer,
-            //     from,
-            //     to,
-            //     code,
-            //     (sig, args),
-            //     tx,
-            //     chain,
-            //     config.etherscan_api_key,
-            //     cast_async,
-            //     confirmations,
-            //     to_json,
-            // )
-            // .await?;    
+            cast_send(
+                signer,
+                from,
+                to,
+                code,
+                (sig, args),
+                tx,
+                chain,
+                config.etherscan_api_key,
+                cast_async,
+                confirmations,
+                to_json,
+            )
+            .await?;    
             
             
         }
