@@ -2,9 +2,10 @@ use clap::Parser;
 use ethers::{
     middleware::SignerMiddleware,
     prelude::Signer,
-    signers::{coins_bip39::English, Ledger, LocalWallet, MnemonicBuilder, Trezor},
+    signers::{coins_bip39::English, Ledger, LocalWallet, MnemonicBuilder, Trezor, AwsSigner},
     types::Address,
 };
+use cast::{KmsClient, AwsRegion, AwsClient, AwsHttpClient, AwsEnvironmentProvider};
 use eyre::{bail, eyre, Result, WrapErr};
 use foundry_common::{fs, RetryProvider};
 use serde::{Deserialize, Serialize};
@@ -34,6 +35,7 @@ The wallet options can either be:
 4. Keystore (via file path)
 5. Private Key (cleartext in CLI)
 6. Private Key (interactively via secure prompt)
+7. AWS KMS
 "#
 )]
 pub struct Wallet {
@@ -133,6 +135,14 @@ pub struct Wallet {
         help = "Use a Trezor hardware wallet."
     )]
     pub trezor: bool,
+
+    #[clap(
+        short,
+        long = "aws",
+        help_heading = "WALLET OPTIONS - KEYSTORE",
+        help = "Use Amazon Web Services, Key Management Service"
+    )]
+    pub aws: bool,
 
     #[clap(
         env = "ETH_FROM",
@@ -333,6 +343,7 @@ pub enum WalletType {
     Local(SignerClient<LocalWallet>),
     Ledger(SignerClient<Ledger>),
     Trezor(SignerClient<Trezor>),
+    // AWS(SignerClient<AwsSigner>),
 }
 
 impl From<SignerClient<Ledger>> for WalletType {
@@ -353,12 +364,19 @@ impl From<SignerClient<LocalWallet>> for WalletType {
     }
 }
 
+// impl From<SignerClient<AwsSigner>> for WalletType {
+//     fn from(wallet: SignerClient<AwsSigner>) -> WalletType {
+//         WalletType::AWS(wallet)
+//     }
+// }
+
 impl WalletType {
     pub fn chain_id(&self) -> u64 {
         match self {
             WalletType::Local(inner) => inner.signer().chain_id(),
             WalletType::Ledger(inner) => inner.signer().chain_id(),
             WalletType::Trezor(inner) => inner.signer().chain_id(),
+            // WalletType::AWS(inner) => inner.signer().chain_id(),
         }
     }
 }
@@ -403,6 +421,7 @@ mod tests {
             mnemonic_passphrase: None,
             ledger: false,
             trezor: false,
+            aws: false,
             hd_path: None,
             mnemonic_index: 0,
         };

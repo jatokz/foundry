@@ -1,8 +1,9 @@
 use super::{Wallet, WalletType};
 use clap::Parser;
+use cast::{KmsClient, AwsRegion, AwsClient, AwsHttpClient, AwsEnvironmentProvider};
 use ethers::{
     middleware::SignerMiddleware,
-    signers::{HDPath as LedgerHDPath, Ledger, Signer, Trezor, TrezorHDPath},
+    signers::{HDPath as LedgerHDPath, Ledger, Signer, Trezor, TrezorHDPath, AwsSigner},
     types::{Address, U256},
 };
 use eyre::Result;
@@ -39,7 +40,7 @@ pub struct EthereumOpts {
 
     #[clap(flatten, next_help_heading = "WALLET OPTIONS")]
     #[serde(skip)]
-    pub wallet: Wallet,
+    pub wallet: Wallet
 }
 
 impl EthereumOpts {
@@ -77,7 +78,7 @@ impl EthereumOpts {
     pub async fn signer_with(
         &self,
         chain_id: U256,
-        provider: Arc<RetryProvider>,
+        provider: Arc<RetryProvider>
     ) -> eyre::Result<Option<WalletType>> {
         if self.wallet.ledger {
             let derivation = match &self.wallet.hd_path {

@@ -31,6 +31,8 @@ pub mod errors;
 mod rlp_converter;
 mod tx;
 
+pub use rusoto_kms::KmsClient;
+pub use rusoto_core::{Client as AwsClient, request::HttpClient as AwsHttpClient, region::Region as AwsRegion, credential::EnvironmentProvider as AwsEnvironmentProvider};
 // TODO: CastContract with common contract initializers? Same for CastProviders?
 
 pub struct Cast<M> {

@@ -4,7 +4,7 @@ use crate::{
     cmd::{cast::wallet::vanity::VanityArgs, Cmd},
     opts::{EthereumOpts, Wallet, WalletType},
 };
-use cast::SimpleCast;
+use cast::{SimpleCast, KmsClient};
 use clap::Parser;
 use ethers::{
     core::rand::thread_rng,
@@ -122,6 +122,7 @@ impl WalletSubcommands {
                         .unwrap_or(wallet),
                     rpc_url: Some("http://localhost:8545".to_string()),
                     chain: Some(Chain::Mainnet.into()),
+                    kms_client: 
                     ..Default::default()
                 }
                 .signer(0u64.into())
@@ -169,5 +170,8 @@ impl WalletSubcommands {
         };
 
         Ok(())
+    },
+    pub async fn new_kms_client(self) -> KmsClient {
+        
     }
 }
