@@ -212,7 +212,7 @@ impl SendTxArgs {
             };
 
             cast_send(
-                signer,
+                &signer,
                 from,
                 to,
                 code,
@@ -249,7 +249,7 @@ impl SendTxArgs {
             };
 
             cast_send(
-                provider,
+                &provider,
                 config.sender,
                 to,
                 code,
@@ -270,8 +270,8 @@ impl SendTxArgs {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn cast_send<M: Middleware, F: Into<NameOrAddress>, T: Into<NameOrAddress>>(
-    provider: M,
+async fn cast_send<'a, M: Middleware, F: Into<NameOrAddress>, T: Into<NameOrAddress>>(
+    provider: &'a M,
     from: F,
     to: Option<T>,
     code: Option<String>,

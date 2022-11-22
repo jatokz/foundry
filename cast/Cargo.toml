@@ -44,4 +44,4 @@ thiserror = "1.0.30"
 default = ["ledger", "trezor", "aws"]
 ledger = ["ethers-signers/ledger"]
 trezor = ["ethers-signers/trezor"]
-aws = ["ethers-signers/aws", "rusoto_core", "rusoto_kms", "tracing", "spki"]
+aws = ["ethers-signers/aws", "rusoto_core", "rusoto_kms"]
