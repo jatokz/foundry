@@ -184,11 +184,6 @@ impl SendTxArgs {
             // let signer = SignerMiddleware::new(provider.clone(), aws);
             
 
-            // let ok;
-
-
-
-
             let key_id = String::from("...");
             let chain_id: U256 = chain.into();
             async {
@@ -235,7 +230,7 @@ impl SendTxArgs {
                 Ok(())
             };
 
-            let ok: eyre::Result<()> = Ok(());
+            // let ok: eyre::Result<()> = Ok(());
         }
         // Checking if signer isn't the default value
         // 00a329c0648769A73afAc7F9381E08FB43dBEA72.
@@ -335,40 +330,62 @@ where
     Ok(())
 }
 
-type AwsSignerCast<'a> = AwsSigner<'a>;
 
-impl<'a> AwsSignerCast<'a> {
-    async fn aws_cast_send<M: Middleware, F: Into<NameOrAddress>, T: Into<NameOrAddress>>(
-        &self,
-        provider: Arc<RetryProvider>,
-        from: F,
-        to: Option<T>,
-        code: Option<String>,
-        args: (String, Vec<String>),
-        tx: TransactionOpts,
-        chain: Chain,
-        etherscan_api_key: Option<String>,
-        cast_async: bool,
-        confs: usize,
-        to_json: bool,
-    ) -> eyre::Result<()>
-    where
-        M::Error: 'static,
-        {
-            let signer = SignerMiddleware::new(provider.clone(), self);
-            cast_send(
-                self.kms,
-                from,
-                to,
-                code,
-                args,
-                tx,
-                chain,
-                etherscan_api_key,
-                cast_async,
-                confs,
-                to_json,
-            ).await?;
-            Ok(())
-        }
-}
+// use async_trait::async_trait;
+
+// #[async_trait]
+// trait AwsSignerCast<'a> {
+//     async fn aws_cast_send<M: Middleware, F: Into<NameOrAddress>, T: Into<NameOrAddress>>(
+//         &self,
+//         provider: Arc<RetryProvider>,
+//         from: F,
+//         to: Option<T>,
+//         code: Option<String>,
+//         args: (String, Vec<String>),
+//         tx: TransactionOpts,
+//         chain: Chain,
+//         etherscan_api_key: Option<String>,
+//         cast_async: bool,
+//         confs: usize,
+//         to_json: bool,
+//     ) -> eyre::Result<()>
+//     where
+//         M::Error: 'static;
+// }
+
+// #[async_trait]
+// impl<'a> AwsSignerCast<'a> for AwsSigner<'a> {
+//     async fn aws_cast_send<M: Middleware, F: Into<NameOrAddress>, T: Into<NameOrAddress>>(
+//         &self,
+//         provider: Arc<RetryProvider>,
+//         from: F,
+//         to: Option<T>,
+//         code: Option<String>,
+//         args: (String, Vec<String>),
+//         tx: TransactionOpts,
+//         chain: Chain,
+//         etherscan_api_key: Option<String>,
+//         cast_async: bool,
+//         confs: usize,
+//         to_json: bool,
+//     ) -> eyre::Result<()>
+//     where
+//         M::Error: 'static,
+//         {
+//             let signer = SignerMiddleware::new(provider.clone(), self);
+//             cast_send(
+//                 self.kms,
+//                 from,
+//                 to,
+//                 code,
+//                 args,
+//                 tx,
+//                 chain,
+//                 etherscan_api_key,
+//                 cast_async,
+//                 confs,
+//                 to_json,
+//             ).await?;
+//             Ok(())
+//         }
+// }

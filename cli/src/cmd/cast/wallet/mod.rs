@@ -122,7 +122,6 @@ impl WalletSubcommands {
                         .unwrap_or(wallet),
                     rpc_url: Some("http://localhost:8545".to_string()),
                     chain: Some(Chain::Mainnet.into()),
-                    kms_client: 
                     ..Default::default()
                 }
                 .signer(0u64.into())
@@ -170,8 +169,5 @@ impl WalletSubcommands {
         };
 
         Ok(())
-    },
-    pub async fn new_kms_client(self) -> KmsClient {
-        
     }
 }
