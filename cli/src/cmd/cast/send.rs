@@ -2,9 +2,10 @@
 use crate::opts::{cast::parse_name_or_address, EthereumOpts, TransactionOpts, WalletType};
 use cast::{Cast, TxBuilder, KmsClient, AwsRegion, AwsClient, AwsHttpClient, AwsEnvironmentProvider};
 use clap::Parser;
-use ethers::{providers::Middleware, types::{NameOrAddress, U256, H256}, signers::AwsSigner, middleware::SignerMiddleware};
+use ethers::{providers::Middleware, types::{NameOrAddress, U256, Address}, signers::AwsSigner, middleware::SignerMiddleware};
 
-use foundry_common::try_get_http_provider;
+// use ethers_core::VerifyingKey;
+use foundry_common::{try_get_http_provider, RetryProvider};
 use foundry_config::{Chain, Config};
 use std::sync::Arc;
 
@@ -86,9 +87,6 @@ impl SendTxArgs {
             if let Some(chain) = eth.chain { chain } else { provider.get_chainid().await?.into() };
         let mut sig = sig.unwrap_or_default();
 
-        let kms;
-        let life;
-        
         if let Ok(Some(signer)) = eth.signer_with(chain.into(), provider.clone()).await {
             let from = match &signer {
                 WalletType::Ledger(ledger) => ledger.address(),
@@ -178,55 +176,66 @@ impl SendTxArgs {
                 AwsHttpClient::new().unwrap()
             );
 
-            kms = KmsClient::new_with_client(client.clone(), AwsRegion::default());
-            life = &kms;
+            // kms = KmsClient::new_with_client(client.clone(), AwsRegion::default());
+            // life = &kms;
+
+
+            // let aws = AwsSigner::new(life, key_id, chain_id.as_u64()).await?;
+            // let signer = SignerMiddleware::new(provider.clone(), aws);
+            
+
+            // let ok;
+
+
+
 
             let key_id = String::from("...");
             let chain_id: U256 = chain.into();
-            let aws = AwsSigner::new(life, key_id, chain_id.as_u64()).await?;
-            let signer = SignerMiddleware::new(provider.clone(), aws);
-            let from = signer.address();
-            // prevent misconfigured hwlib from sending a transaction that defies
-            // user-specified --from
-            if let Some(specified_from) = eth.wallet.from {
-                if specified_from != from {
-                    eyre::bail!("The specified sender via CLI/env vars does not match the sender configured via the hardware wallet's HD Path. Please use the `--hd-path <PATH>` parameter to specify the BIP32 Path which corresponds to the sender. This will be automatically detected in the future: https://github.com/foundry-rs/foundry/issues/2289")
+            async {
+                let kms = KmsClient::new_with_client(client.clone(), AwsRegion::default());
+                let aws = AwsSigner::new(&kms, key_id, chain_id.as_u64()).await?;
+                let signer = SignerMiddleware::new(provider.clone(), aws);
+                let from = signer.address();
+                // prevent misconfigured hwlib from sending a transaction that defies
+                // user-specified --from
+                if let Some(specified_from) = eth.wallet.from {
+                    if specified_from != from {
+                        eyre::bail!("The specified sender via CLI/env vars does not match the sender configured via the hardware wallet's HD Path. Please use the `--hd-path <PATH>` parameter to specify the BIP32 Path which corresponds to the sender. This will be automatically detected in the future: https://github.com/foundry-rs/foundry/issues/2289")
+                    }
                 }
-            }
-
-            if resend {
-                tx.nonce = Some(provider.get_transaction_count(from, None).await?);
-            }
-
-            let code = if let Some(SendTxSubcommands::Create {
-                code,
-                sig: constructor_sig,
-                args: constructor_args,
-            }) = command
-            {
-                sig = constructor_sig.unwrap_or_default();
-                args = constructor_args;
-                Some(code)
-            } else {
-                None
+                if resend {
+                    tx.nonce = Some(provider.get_transaction_count(from, None).await?);
+                }
+                let code = if let Some(SendTxSubcommands::Create {
+                    code,
+                    sig: constructor_sig,
+                    args: constructor_args,
+                }) = command
+                {
+                    sig = constructor_sig.unwrap_or_default();
+                    args = constructor_args;
+                    Some(code)
+                } else {
+                    None
+                };
+                cast_send(
+                    signer,
+                    from,
+                    to,
+                    code,
+                    (sig, args),
+                    tx,
+                    chain,
+                    config.etherscan_api_key,
+                    cast_async,
+                    confirmations,
+                    to_json,
+                )
+                .await?;
+                Ok(())
             };
 
-            cast_send(
-                &signer,
-                from,
-                to,
-                code,
-                (sig, args),
-                tx,
-                chain,
-                config.etherscan_api_key,
-                cast_async,
-                confirmations,
-                to_json,
-            )
-            .await?;    
-            
-            
+            let ok: eyre::Result<()> = Ok(());
         }
         // Checking if signer isn't the default value
         // 00a329c0648769A73afAc7F9381E08FB43dBEA72.
@@ -249,7 +258,7 @@ impl SendTxArgs {
             };
 
             cast_send(
-                &provider,
+                provider,
                 config.sender,
                 to,
                 code,
@@ -270,8 +279,8 @@ impl SendTxArgs {
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn cast_send<'a, M: Middleware, F: Into<NameOrAddress>, T: Into<NameOrAddress>>(
-    provider: &'a M,
+async fn cast_send<M: Middleware, F: Into<NameOrAddress>, T: Into<NameOrAddress>>(
+    provider: M,
     from: F,
     to: Option<T>,
     code: Option<String>,
@@ -326,124 +335,40 @@ where
     Ok(())
 }
 
+type AwsSignerCast<'a> = AwsSigner<'a>;
 
-#[allow(clippy::too_many_arguments)]
-async fn aws_cast_send<F: Into<NameOrAddress>, T: Into<NameOrAddress>>(
-    from: F,
-    to: Option<T>,
-    code: Option<String>,
-    // args: (String, Vec<String>),
-    // tx: TransactionOpts,
-    chain: Chain,
-    etherscan_api_key: Option<String>,
-    cast_async: bool,
-    confs: usize,
-    to_json: bool,
-    mut send_tx_args: SendTxArgs
-) -> eyre::Result<()> {
-    let config = Config::from(&send_tx_args.eth);
-    let provider = Arc::new(try_get_http_provider(config.get_rpc_url_or_localhost_http()?)?);
-    let mut sig = send_tx_args.sig.unwrap_or_default();
-    let mut args = send_tx_args.args;
-
-    let kms;
-    let life;
-
-    let client = AwsClient::new_with(
-        AwsEnvironmentProvider::default(),
-        AwsHttpClient::new().unwrap()
-    );
-
-    // kms = KmsClient::new_with_client(client.clone(), AwsRegion::default());
-    kms = KmsClient { client: client.clone(), region: AwsRegion::default() };
-    life = kms.to_owned();
-
-    let key_id = String::from("...");
-    let chain_id: U256 = chain.into();
-    let aws = AwsSigner::new(&kms, key_id, chain_id.as_u64()).await?;
-    
-    let pubkey = aws.get_pubkey().await?;
-
-    let signer = SignerMiddleware::new(provider.clone(), aws);
-    let from = signer.address();
-    // prevent misconfigured hwlib from sending a transaction that defies
-    // user-specified --from
-    if let Some(specified_from) = send_tx_args.eth.wallet.from {
-        if specified_from != from {
-            eyre::bail!("The specified sender via CLI/env vars does not match the sender configured via the hardware wallet's HD Path. Please use the `--hd-path <PATH>` parameter to specify the BIP32 Path which corresponds to the sender. This will be automatically detected in the future: https://github.com/foundry-rs/foundry/issues/2289")
+impl<'a> AwsSignerCast<'a> {
+    async fn aws_cast_send<M: Middleware, F: Into<NameOrAddress>, T: Into<NameOrAddress>>(
+        &self,
+        provider: Arc<RetryProvider>,
+        from: F,
+        to: Option<T>,
+        code: Option<String>,
+        args: (String, Vec<String>),
+        tx: TransactionOpts,
+        chain: Chain,
+        etherscan_api_key: Option<String>,
+        cast_async: bool,
+        confs: usize,
+        to_json: bool,
+    ) -> eyre::Result<()>
+    where
+        M::Error: 'static,
+        {
+            let signer = SignerMiddleware::new(provider.clone(), self);
+            cast_send(
+                self.kms,
+                from,
+                to,
+                code,
+                args,
+                tx,
+                chain,
+                etherscan_api_key,
+                cast_async,
+                confs,
+                to_json,
+            ).await?;
+            Ok(())
         }
-    }
-
-    if send_tx_args.resend {
-        send_tx_args.tx.nonce = Some(provider.get_transaction_count(from, None).await?);
-    }
-
-
-    let code = if let Some(SendTxSubcommands::Create {
-        code,
-        sig: constructor_sig,
-        args: constructor_args,
-    }) = send_tx_args.command
-    {
-        sig = constructor_sig.unwrap_or_default();
-        args = constructor_args;
-        Some(code)
-    } else {
-        None
-    };
-
-    // cast_send(
-    //     signer,
-    //     from,
-    //     to,
-    //     code,
-    //     (sig, args),
-    //     send_tx_args.tx,
-    //     chain,
-    //     config.etherscan_api_key,
-    //     cast_async,
-    //     send_tx_args.confirmations,
-    //     to_json,
-    // )
-    // .await?;    
-
-
-    let params = if !sig.is_empty() { Some((&sig[..], args)) } else { None };
-    let mut builder = TxBuilder::new(&provider, from, to, chain, send_tx_args.tx.legacy).await?;
-    builder
-        .etherscan_api_key(etherscan_api_key)
-        .gas(send_tx_args.tx.gas_limit)
-        .gas_price(send_tx_args.tx.gas_price)
-        .priority_gas_price(send_tx_args.tx.priority_gas_price)
-        .value(send_tx_args.tx.value)
-        .nonce(send_tx_args.tx.nonce);
-
-    if let Some(code) = code {
-        let mut data = hex::decode(code.strip_prefix("0x").unwrap_or(&code))?;
-
-        if let Some((sig, args)) = params {
-            let (mut sigdata, _) = builder.create_args(sig, args).await?;
-            data.append(&mut sigdata);
-        }
-
-        builder.set_data(data);
-    } else {
-        builder.args(params).await?;
-    };
-    let builder_output = builder.build();
-    
-
-    let cast = Cast::new(provider);
-
-    let pending_tx = cast.send(builder_output).await?;
-    let tx_hash = *pending_tx;
-
-    if cast_async {
-        println!("{tx_hash:#x}");
-    } else {
-        let receipt = cast.receipt(format!("{tx_hash:#x}"), None, confs, false, to_json).await?;
-        println!("{receipt}");
-    }
-
-    Ok(())
 }
