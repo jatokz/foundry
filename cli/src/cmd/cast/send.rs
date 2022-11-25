@@ -175,19 +175,11 @@ impl SendTxArgs {
                 AwsEnvironmentProvider::default(),
                 AwsHttpClient::new().unwrap()
             );
-
-            // kms = KmsClient::new_with_client(client.clone(), AwsRegion::default());
-            // life = &kms;
-
-
-            // let aws = AwsSigner::new(life, key_id, chain_id.as_u64()).await?;
-            // let signer = SignerMiddleware::new(provider.clone(), aws);
-            
-
             let key_id = String::from("...");
             let chain_id: U256 = chain.into();
             async {
                 let kms = KmsClient::new_with_client(client.clone(), AwsRegion::default());
+                // let life= &kms;
                 let aws = AwsSigner::new(&kms, key_id, chain_id.as_u64()).await?;
                 let signer = SignerMiddleware::new(provider.clone(), aws);
                 let from = signer.address();
@@ -227,7 +219,7 @@ impl SendTxArgs {
                     to_json,
                 )
                 .await?;
-                Ok(())
+                Ok(&kms)
             };
 
             // let ok: eyre::Result<()> = Ok(());
@@ -330,6 +322,80 @@ where
     Ok(())
 }
 
+#[allow(clippy::too_many_arguments)]
+async fn aws_cast_send<'a>(
+    kms: &'a KmsClient,
+    eth: EthereumOpts,
+    sig: Option<String>,
+    resend: bool,
+    mut tx: TransactionOpts,
+    command: Option<SendTxSubcommands>,
+    mut args: Vec<String>,
+    to: Option<NameOrAddress>,
+    cast_async: bool,
+    to_json: bool,
+    confirmations: usize,
+) ->  eyre::Result<&'a KmsClient>
+// where
+//     M::Error: 'static,
+    {
+        let config = Config::from(&eth);
+        let provider = Arc::new(try_get_http_provider(config.get_rpc_url_or_localhost_http()?)?);
+        let chain: Chain =
+        if let Some(chain) = eth.chain { chain } else { provider.get_chainid().await?.into() };
+        let mut sig = sig.unwrap_or_default();
+
+        let client = AwsClient::new_with(
+            AwsEnvironmentProvider::default(),
+            AwsHttpClient::new().unwrap()
+        );
+        let key_id = String::from("...");
+        let chain_id: U256 = chain.into();
+
+            // let kms = KmsClient::new_with_client(client.clone(), AwsRegion::default());
+            // let life = &kms;
+        let aws = AwsSigner::new(&kms, key_id, chain_id.as_u64()).await?;
+        let signer = SignerMiddleware::new(provider.clone(), aws);
+        let from = signer.address();
+        // prevent misconfigured hwlib from sending a transaction that defies
+        // user-specified --from
+        if let Some(specified_from) = eth.wallet.from {
+            if specified_from != from {
+                eyre::bail!("The specified sender via CLI/env vars does not match the sender configured via the hardware wallet's HD Path. Please use the `--hd-path <PATH>` parameter to specify the BIP32 Path which corresponds to the sender. This will be automatically detected in the future: https://github.com/foundry-rs/foundry/issues/2289")
+            }
+        }
+        if resend {
+            tx.nonce = Some(provider.get_transaction_count(from, None).await?);
+        }
+        let code = if let Some(SendTxSubcommands::Create {
+            code,
+            sig: constructor_sig,
+            args: constructor_args,
+        }) = command
+        {
+            sig = constructor_sig.unwrap_or_default();
+            args = constructor_args;
+            Some(code)
+        } else {
+            None
+        };
+        cast_send(
+            signer,
+            from,
+            to,
+            code,
+            (sig, args),
+            tx,
+            chain,
+            config.etherscan_api_key,
+            cast_async,
+            confirmations,
+            to_json,
+        )
+        .await?;
+
+        Ok(kms)
+    }
 
 // use async_trait::async_trait;
 
